@@ -3,6 +3,8 @@
 #include <variant>
 #include <system_error>
 #include <functional>
+#include <sstream>
+#include "helpers.hpp"
 
 class state_base {
 public:
@@ -15,10 +17,10 @@ protected:
 
 using state_handle = std::unique_ptr<state_base>;
 
-template<typename T>
+template<typename ...Events>
 class state : public state_base {
 public:
-    using result = std::variant<std::error_code, T>;
+    using result = std::variant<Events...>;
     using completion_handler = std::function<void(const result&)>;
     state(asio::io_service& io, completion_handler cb) : state_base(io), cb(std::move(cb)), rc(0) {}
     virtual ~state() override = default;
@@ -91,13 +93,13 @@ constexpr bool match_impl() {
     return match_impl<State, Event, Transition>() || match_impl<State, Event, Transition2, Args2...>();
 }
 
+struct end_of_list;
 
 template<typename ...Args>
 class transitions {
 private:
     template<typename State, typename Event, typename Transition, typename ...Rest>
     struct next_state_impl;
-    struct end_of_list;
 public:
     struct no_transition;
 
@@ -132,3 +134,60 @@ private:
         >::type;
     };
 };
+
+template<typename Visitor, typename Transition, typename ...Rest>
+struct visit_impl {
+    void operator()(Visitor& visitor) const {
+        visitor.template operator()<Transition>();
+        visit_impl<Visitor, Rest...>{}(visitor);
+    }
+};
+
+
+template<typename Visitor, typename Transition>
+struct visit_impl<Visitor, Transition, end_of_list> {
+    void operator()(Visitor& visitor) const {
+        visitor.template operator()<Transition>();        
+    }
+};
+
+
+template<typename Transitions>
+class fsm; 
+
+template<typename ...Args>
+class fsm<transitions<Args...>> {
+public:
+    using transition_table = transitions<Args...>;
+
+    template<typename Visitor>
+    static void visit(Visitor& visitor) {        
+        visitor.start();
+        visit_impl<Visitor, Args..., end_of_list>{}(visitor);
+        visitor.end();
+    }    
+};
+
+struct graphviz_export {
+    
+    graphviz_export(std::ostream& out) : out(out) {}
+
+    void start() {
+        out << "digraph {" << std::endl;
+    }
+
+    void end() {
+        out << "}" << std::endl;
+    }
+
+    template<typename Transition>
+    void operator()() {
+        // "a" -> "b"[label="0.2"];
+        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());
+    }
+
+    std::ostream& out;    
+};
+
+
+

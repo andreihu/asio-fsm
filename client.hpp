@@ -18,7 +18,17 @@ struct context {
     size_t                  nbackoff;
 };
 
-class resolving : public state<asio::ip::tcp::endpoint> {
+namespace events {
+class retry {};
+class shutdown {
+public:
+    shutdown() = default;
+    shutdown(const std::error_code& ec) noexcept: ec(ec) {}
+    std::error_code ec;
+};
+}
+
+class resolving : public state<std::error_code, asio::ip::tcp::endpoint, events::shutdown> {
 public:
     resolving(asio::io_service& io, const std::string& addr, const std::string& service, completion_handler cb) :
         state(io, std::move(cb)),
@@ -30,6 +40,7 @@ public:
     }
 
     virtual void cancel() override {
+        complete(events::shutdown{});
         resolver.cancel();
     }
 private:
@@ -44,7 +55,7 @@ struct state_factory<resolving, Event, context> {
     }
 };
 
-class connecting : public state<std::reference_wrapper<asio::ip::tcp::socket>> {
+class connecting : public state<std::error_code, std::reference_wrapper<asio::ip::tcp::socket>, events::shutdown> {
 public:
     connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep, completion_handler cb) :
         state(io, std::move(cb)),
@@ -56,13 +67,14 @@ public:
     }
 
     virtual void cancel() override {
+        complete(events::shutdown{});
         sock.cancel();
     }
 private:
     asio::ip::tcp::socket sock;
 };
 
-class online : public state<std::monostate> {
+class online : public state<std::error_code, events::shutdown> {
 public:
     online(asio::io_service& io, asio::ip::tcp::socket& sock, completion_handler cb) :
         state(io, std::move(cb)),
@@ -75,6 +87,7 @@ public:
     }
 
     virtual void cancel() override {
+        complete(events::shutdown{});
         sock.cancel();
         timer.cancel();
     }
@@ -117,7 +130,7 @@ private:
     std::string             rx_buffer;
 };
 
-class backoff : public state<std::monostate> {
+class backoff : public state<events::retry, std::error_code, events::shutdown> {
 public:
     backoff(asio::io_service& io, std::chrono::seconds cooldown, completion_handler cb) :
         state(io, std::move(cb)),
@@ -125,7 +138,7 @@ public:
     {
         timer.expires_from_now(cooldown);
         timer.async_wait(track([this](const std::error_code& ec) {
-            ec ? complete(ec) : complete(std::monostate{});
+            ec ? complete(ec) : complete(events::retry{});
         }));
     }
 
@@ -145,7 +158,23 @@ struct state_factory<backoff, Event, context> {
     }
 };
 
-class client {
+class client : public fsm<transitions<
+        transition<resolving, std::error_code, backoff>,
+        transition<resolving, asio::ip::tcp::endpoint, connecting>,
+        transition<resolving, events::shutdown, completed>,
+
+        transition<connecting, std::error_code, backoff>,
+        transition<connecting, std::reference_wrapper<asio::ip::tcp::socket>, online>,
+        transition<connecting, events::shutdown, completed>,
+
+        transition<online, std::error_code, backoff>,
+        transition<online, events::shutdown, completed>,
+
+        transition<backoff, events::retry, resolving>,
+        transition<backoff, std::error_code, completed>,
+        transition<backoff, events::shutdown, completed>
+    >>
+{
 public:
     client(asio::io_service& io) : io(io) {}
     using completion_handler = std::function<void(const std::error_code& r)>;
@@ -153,20 +182,7 @@ public:
     void async_wait(const std::string& host, const std::string& service, completion_handler cb) {
         sess.emplace(std::move(cb), std::bind(&client::on_event<resolving, resolving::result>, this, std::placeholders::_1), io, host, service);
     }
-
 private:
-
-    using transition_table = transitions<
-        transition<resolving, std::error_code, backoff>,
-        transition<resolving, asio::ip::tcp::endpoint, connecting>,
-        transition<connecting, std::error_code, backoff>,
-        transition<connecting, std::reference_wrapper<asio::ip::tcp::socket>, online>,
-        transition<online, std::error_code, backoff>,
-        transition<online, std::monostate, completed>,
-        transition<backoff, std::monostate, resolving>,
-        transition<backoff, std::error_code, completed>>;
-
-
 
     void complete(const std::error_code& ec = std::error_code{}) {
         if (sess) {
@@ -183,16 +199,15 @@ private:
             using next_state_type = transition_table::next_state<State, event_type>;
             using namespace boost::core;
             log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
-
             if constexpr (!std::is_same_v<next_state_type, completed>) {
                 auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
                 sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
                 return;
-            } else if constexpr (std::is_same_v<event_type, std::monostate>) {
-                complete();
+            } else if constexpr (std::is_same_v<event_type, events::shutdown>) {
+                complete(v.ec);
                 return;
-            } else if constexpr (std::is_same_v<event_type, std::error_code>) {
-                complete(v);
+            } else {
+                complete();
                 return;
             }
         }, ev);
@@ -214,4 +229,3 @@ private:
     std::optional<session>      sess;
     asio::io_service&           io;
 };
-

@@ -8,6 +8,10 @@
 int main(int argc, char *argv[]) {
     std::string server_address = "127.0.0.1";
     asio::io_service io;
+
+    graphviz_export exporter(std::cout);
+    client::visit(exporter);
+
     client c(io);
     c.async_wait("127.0.0.1", "5555", [&](const std::error_code& ec) {
         if (ec) {
