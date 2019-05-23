@@ -109,7 +109,7 @@ public:
     using completion_handler = std::function<void(const std::error_code& r)>;
 
     void async_wait(const std::string& addr, const std::string& service, completion_handler cb) {
-        sess.emplace(std::make_unique<resolving>(io, addr, service, std::bind(&client::on_event<resolving>, this, std::placeholders::_1)), std::move(cb), io);
+        sess.emplace(std::make_unique<resolving>(io, addr, service, std::bind(&client::on_event<resolving, resolving::result>, this, std::placeholders::_1)), std::move(cb), io);
     }
 
 private:
@@ -128,12 +128,19 @@ private:
         transition<online, std::error_code, completed>,
         transition<online, std::monostate, completed>>;
 
-    template<typename State>
-    void on_event(const typename State::result& r) {
+    template<typename State, typename Event>
+    void on_event(const Event& ev) {
         std::visit([this](auto v) {
-            transition_table t;
-            t.make_transition<State>(v, sess->ctx);
-        }, r);
+            using event_type = std::decay_t<decltype(v)>;
+            transition_table::assert_match<State, event_type>();
+            using next_state_type = transition_table::next_state<State, event_type>;
+            log("%s + %s => %s", typeid(State).name(), typeid(event_type).name(), typeid(next_state_type).name());
+            if constexpr (!std::is_same_v<next_state_type, completed>) {
+                auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
+                // ctx->state = state_factory<
+            }
+        }, ev);
+
     }
 
 private:
