@@ -8,6 +8,13 @@
 #include <optional>
 #include <functional>
 
+#include <boost/core/typeinfo.hpp>
+
+template<typename T>
+std::string type_name() {
+    return boost::core::demangled_name(BOOST_CORE_TYPEID(T));
+}
+
 struct scope_exit {
     scope_exit(std::function<void (void)> f) : f(f) {}
     ~scope_exit(void) { f(); }

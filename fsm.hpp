@@ -13,6 +13,8 @@ protected:
     asio::io_service&       io;
 }; // class state_base
 
+using state_handle = std::unique_ptr<state_base>;
+
 template<typename T>
 class state : public state_base {
 public:
