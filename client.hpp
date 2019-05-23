@@ -137,7 +137,7 @@ private:
             log("%s + %s => %s", typeid(State).name(), typeid(event_type).name(), typeid(next_state_type).name());
             if constexpr (!std::is_same_v<next_state_type, completed>) {
                 auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
-                // ctx->state = state_factory<
+                sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
             }
         }, ev);
 

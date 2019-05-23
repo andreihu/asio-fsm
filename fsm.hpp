@@ -53,7 +53,8 @@ struct completed{
 
 template<typename State, typename Event, typename Context>
 struct state_factory {
-    std::unique_ptr<state_base> operator()(const Event& ev, Context& ctx, typename State::completion_handler cb) const {
+    template<typename Callback>
+    std::unique_ptr<state_base> operator()(const Event& ev, Context& ctx, Callback cb) const {
         return std::make_unique<State>(ctx.io, ev, std::move(cb));
     }
 };
@@ -85,7 +86,7 @@ constexpr bool match_impl() {
 
 template<typename State, typename Event, typename Transition, typename Transition2, typename ...Args2>
 constexpr bool match_impl() {
-    return match_impl<State, Event, Transition>() || match_impl<State, Event, Transition2>() || match_impl<State, Event, Args2...>();
+    return match_impl<State, Event, Transition>() || match_impl<State, Event, Transition2, Args2...>();
 }
 
 
