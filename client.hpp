@@ -113,6 +113,12 @@ public:
     }
 
 private:
+    struct context {
+        context(completion_handler cb, asio::io_service& io) : io(io), cb(std::move(cb)) {}
+
+        completion_handler  cb;
+        asio::io_service&   io;
+    };
 
     using transition_table = transitions<
         transition<resolving, std::error_code, completed>,
@@ -124,19 +130,13 @@ private:
 
     template<typename State>
     void on_event(const typename State::result& r) {
-        std::visit([](auto v) {
+        std::visit([this](auto v) {
             transition_table t;
-            t.match<State>(v);
+            t.make_transition<State>(v, sess->ctx);
         }, r);
     }
 
 private:
-    struct context {
-        context(completion_handler cb, asio::io_service& io) : io(io), cb(std::move(cb)) {}
-
-        completion_handler  cb;
-        asio::io_service&   io;
-    };
 
     struct session {
         template<typename ...Args>

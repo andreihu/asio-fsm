@@ -48,6 +48,13 @@ private:
 }; // class state
 
 
+template<typename State, typename Event, typename Context>
+struct state_factory {
+    std::unique_ptr<state_base> operator()(const Event& ev, Context& ctx) const {
+        return nullptr;
+    }
+};
+
 template<typename SourceState, typename Event, typename NextState>
 struct transition {
     using source = SourceState;
@@ -57,18 +64,42 @@ struct transition {
 
 template<typename ...Args>
 struct transitions {
-    template<typename State, typename Event>
-    static bool match(const Event& ev) {
-        static_assert(match_impl<State, Event, Args...>(), "no matching transition found");
-        if constexpr (!match_impl<State, Event, Args...>()) {
-            return false;
-        } else {
+    template<typename State, typename Event, typename Context>
+    static std::unique_ptr<state_base> make_transition(const Event& ev, Context& ctx) {
+        assert_match<State, Event>(ev);
 
-            return true;
-        }
+        return make_transition_impl<State, Event, Context, Args...>(ev, ctx);
+    }
+private:
+    template<typename State, typename Event, typename Context>
+    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx) {
+        return nullptr;
     }
 
-private:
+    template<typename State, typename Event, typename Context, typename Transition>
+    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx) {
+        if constexpr (match_impl<State, Event, Transition>()) {
+            return state_factory<typename Transition::next, Event, Context>{}(ev, ctx);
+        }
+        return nullptr;
+    }
+
+    template<typename State, typename Event, typename Context, typename Transition, typename Transition2, typename ...Args2>
+    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx) {
+        if (auto retval = make_transition_impl<State, Event, Context, Transition>(ev, ctx)) {
+            return retval;
+        } else if (auto retval = make_transition_impl<State, Event, Context, Transition>(ev, ctx)) {
+            return retval;
+        }
+
+        return make_transition_impl<State, Event, Context, Args2...>(ev, ctx);
+    }
+
+    template<typename State, typename Event>
+    static void assert_match(const Event& ev) {
+        static_assert(match_impl<State, Event, Args...>(), "no matching transition found");
+    }
+
     template<typename State, typename Event>
     static constexpr bool match_impl() {
         return false;
