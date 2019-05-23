@@ -128,6 +128,13 @@ private:
         transition<online, std::error_code, completed>,
         transition<online, std::monostate, completed>>;
 
+    void complete(const std::error_code& ec = std::error_code{}) {
+        if (sess) {
+            io.post(std::bind(sess->ctx.cb, ec));
+            sess = std::nullopt;
+        }
+    }
+
     template<typename State, typename Event>
     void on_event(const Event& ev) {
         std::visit([this](auto v) {
@@ -138,6 +145,13 @@ private:
             if constexpr (!std::is_same_v<next_state_type, completed>) {
                 auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
                 sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
+                return;
+            } else if constexpr (std::is_same_v<event_type, std::monostate>) {
+                complete();
+                return;
+            } else if constexpr (std::is_same_v<event_type, std::error_code>) {
+                complete(v);
+                return;
             }
         }, ev);
 

@@ -91,9 +91,13 @@ constexpr bool match_impl() {
 
 
 template<typename ...Args>
-struct transitions {
-    struct no_transition {};
+class transitions {
+private:
+    template<typename State, typename Event, typename Transition, typename ...Rest>
+    struct next_state_impl;
     struct end_of_list;
+public:
+    struct no_transition;
 
     template<typename State, typename Event>
     static void assert_match() {
@@ -105,7 +109,9 @@ struct transitions {
         return match_impl<State, Event, Args...>();
     }
 
-
+    template<typename State, typename Event>
+    using next_state = typename next_state_impl<State, Event, Args..., end_of_list>::type;
+private:
     template<typename State, typename Event, typename Transition, typename ...Rest>
     struct next_state_impl {
         using type = typename std::conditional<
@@ -123,43 +129,4 @@ struct transitions {
             no_transition
         >::type;
     };
-
-    template<typename State, typename Event>
-    using next_state = typename next_state_impl<State, Event, Args..., end_of_list>::type;
-
-
-private:
-#if 0
-    template<typename State, typename Event, typename Context, typename Callback>
-    static std::unique_ptr<state_base> make_transition(const Event& ev, Context& ctx, Callback cb) {
-        assert_match<State, Event>(ev);
-
-        return make_transition_impl<State, Event, Context, Args...>(ev, ctx, std::move(cb));
-    }
-
-
-    template<typename State, typename Event, typename Context, typename Callback>
-    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx, Callback cb) {
-        return nullptr;
-    }
-
-    template<typename State, typename Event, typename Context, typename Callback, typename Transition>
-    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx, Callback cb) {
-        if constexpr (match<State, Event, Transition>()) {
-            return state_factory<typename Transition::next, Event, Context>{}(ev, ctx, std::move(cb));
-        }
-        return nullptr;
-    }
-
-    template<typename State, typename Event, typename Context, typename Callback, typename Transition, typename Transition2, typename ...Args2>
-    static std::unique_ptr<state_base> make_transition_impl(const Event& ev, Context& ctx, Callback cb) {
-        if (auto retval = make_transition_impl<State, Event, Context, Transition>(ev, ctx, std::move(cb))) {
-            return retval;
-        } else if (auto retval = make_transition_impl<State, Event, Context, Callback, Transition2>(ev, ctx, std::move(cb))) {
-            return retval;
-        }
-
-        return make_transition_impl<State, Event, Context, Callback, Args2...>(ev, ctx, std::move(cb));
-    }
-#endif
 };
