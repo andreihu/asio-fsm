@@ -26,16 +26,24 @@ public:
     shutdown(const std::error_code& ec) noexcept: ec(ec) {}
     std::error_code ec;
 };
-}
 
-class resolving : public state<std::error_code, asio::ip::tcp::endpoint, events::shutdown> {
+class failure {
+public:
+    failure() = default;
+    failure(const std::error_code& ec) noexcept: ec(ec) {}
+    std::error_code ec;
+};
+
+} // namespace events
+
+class resolving : public state<events::failure, asio::ip::tcp::endpoint, events::shutdown> {
 public:
     resolving(asio::io_service& io, const std::string& addr, const std::string& service, completion_handler cb) :
         state(io, std::move(cb)),
         resolver(io)
     {
         resolver.async_resolve(addr, service, track([this](const std::error_code& ec, asio::ip::tcp::resolver::iterator it) {
-            ec ? complete(ec) : complete(*it);
+            ec ? complete(events::failure(ec)) : complete(*it);
         }));
     }
 
@@ -55,14 +63,14 @@ struct state_factory<resolving, Event, context> {
     }
 };
 
-class connecting : public state<std::error_code, std::reference_wrapper<asio::ip::tcp::socket>, events::shutdown> {
+class connecting : public state<events::failure, std::reference_wrapper<asio::ip::tcp::socket>, events::shutdown> {
 public:
     connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep, completion_handler cb) :
         state(io, std::move(cb)),
         sock(io)
     {
         sock.async_connect(ep, track([this](const std::error_code& ec) {
-            ec ? complete(ec) : complete(std::ref(sock));
+            ec ? complete(events::failure(ec)) : complete(std::ref(sock));
         }));
     }
 
@@ -74,7 +82,7 @@ private:
     asio::ip::tcp::socket sock;
 };
 
-class online : public state<std::error_code, events::shutdown> {
+class online : public state<events::failure, events::shutdown> {
 public:
     online(asio::io_service& io, asio::ip::tcp::socket& sock, completion_handler cb) :
         state(io, std::move(cb)),
@@ -97,7 +105,7 @@ private:
         using namespace std::literals;
         asio::async_read_until(sock, asio::dynamic_buffer(rx_buffer), "\n"sv, track([this] (const std::error_code& ec, size_t bytes_transferred) {
             if (ec) {
-                return complete(ec);
+                return complete(events::failure(ec));
             }
 
             log("got %s", rx_buffer);
@@ -117,10 +125,10 @@ private:
                     return;
                 }
 
-                return complete(ec);
+                return complete(events::failure(ec));
             }
 
-            return complete(make_error_code(std::errc::timed_out));
+            return complete(events::failure(make_error_code(std::errc::timed_out)));
         }));
     }
 private:
@@ -130,7 +138,7 @@ private:
     std::string             rx_buffer;
 };
 
-class backoff : public state<events::retry, std::error_code, events::shutdown> {
+class backoff : public state<events::retry, events::failure, events::shutdown> {
 public:
     backoff(asio::io_service& io, std::chrono::seconds cooldown, completion_handler cb) :
         state(io, std::move(cb)),
@@ -138,7 +146,7 @@ public:
     {
         timer.expires_from_now(cooldown);
         timer.async_wait(track([this](const std::error_code& ec) {
-            ec ? complete(ec) : complete(events::retry{});
+            ec ? complete(events::failure(ec)) : complete(events::retry{});
         }));
     }
 
@@ -159,19 +167,19 @@ struct state_factory<backoff, Event, context> {
 };
 
 class client : public fsm<transitions<
-        transition<resolving, std::error_code, backoff>,
+        transition<resolving, events::failure, backoff>,
         transition<resolving, asio::ip::tcp::endpoint, connecting>,
         transition<resolving, events::shutdown, completed>,
 
-        transition<connecting, std::error_code, backoff>,
+        transition<connecting, events::failure, backoff>,
         transition<connecting, std::reference_wrapper<asio::ip::tcp::socket>, online>,
         transition<connecting, events::shutdown, completed>,
 
-        transition<online, std::error_code, backoff>,
+        transition<online, events::failure, backoff>,
         transition<online, events::shutdown, completed>,
 
         transition<backoff, events::retry, resolving>,
-        transition<backoff, std::error_code, completed>,
+        transition<backoff, events::failure, completed>,
         transition<backoff, events::shutdown, completed>
     >>
 {
