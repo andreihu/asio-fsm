@@ -18,37 +18,57 @@ struct context {
     size_t                  nbackoff;
 };
 
-namespace events {
+// events
+
 class retry {};
-class shutdown {
+class terminated {
 public:
-    shutdown() = default;
-    shutdown(const std::error_code& ec) noexcept: ec(ec) {}
+    terminated() = default;
+    terminated(const std::error_code& ec) noexcept: ec(ec) {}
     std::error_code ec;
 };
 
-class failure {
+class failed {
 public:
-    failure() = default;
-    failure(const std::error_code& ec) noexcept: ec(ec) {}
+    failed() = default;
+    failed(const std::error_code& ec) noexcept: ec(ec) {}
     std::error_code ec;
 };
 
-} // namespace events
+class resolved {
+public:
+    resolved(asio::ip::tcp::endpoint ep) : ep(ep) {}
+    operator asio::ip::tcp::endpoint() const {
+        return ep;
+    }
+    asio::ip::tcp::endpoint ep;
+};
 
-class resolving : public state<events::failure, asio::ip::tcp::endpoint, events::shutdown> {
+class connected {
+public:
+    connected(asio::ip::tcp::socket& sock) noexcept: sock(sock) {}
+    std::reference_wrapper<asio::ip::tcp::socket> sock;
+
+    operator asio::ip::tcp::socket&() const {
+        return sock.get();
+    }
+};
+
+// states
+
+class resolving : public state<failed, resolved, terminated> {
 public:
     resolving(asio::io_service& io, const std::string& addr, const std::string& service, completion_handler cb) :
         state(io, std::move(cb)),
         resolver(io)
     {
         resolver.async_resolve(addr, service, track([this](const std::error_code& ec, asio::ip::tcp::resolver::iterator it) {
-            ec ? complete(events::failure(ec)) : complete(*it);
+            ec ? complete<failed>(ec) : complete<resolved>(*it);
         }));
     }
 
     virtual void cancel() override {
-        complete(events::shutdown{});
+        complete<terminated>();
         resolver.cancel();
     }
 private:
@@ -63,26 +83,26 @@ struct state_factory<resolving, Event, context> {
     }
 };
 
-class connecting : public state<events::failure, std::reference_wrapper<asio::ip::tcp::socket>, events::shutdown> {
+class connecting : public state<failed, connected, terminated> {
 public:
     connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep, completion_handler cb) :
         state(io, std::move(cb)),
         sock(io)
     {
         sock.async_connect(ep, track([this](const std::error_code& ec) {
-            ec ? complete(events::failure(ec)) : complete(std::ref(sock));
+            ec ? complete<failed>(ec) : complete<connected>(sock);
         }));
     }
 
     virtual void cancel() override {
-        complete(events::shutdown{});
+        complete<terminated>();
         sock.cancel();
     }
 private:
     asio::ip::tcp::socket sock;
 };
 
-class online : public state<events::failure, events::shutdown> {
+class online : public state<failed, terminated> {
 public:
     online(asio::io_service& io, asio::ip::tcp::socket& sock, completion_handler cb) :
         state(io, std::move(cb)),
@@ -95,7 +115,7 @@ public:
     }
 
     virtual void cancel() override {
-        complete(events::shutdown{});
+        complete<terminated>();
         sock.cancel();
         timer.cancel();
     }
@@ -105,7 +125,7 @@ private:
         using namespace std::literals;
         asio::async_read_until(sock, asio::dynamic_buffer(rx_buffer), "\n"sv, track([this] (const std::error_code& ec, size_t bytes_transferred) {
             if (ec) {
-                return complete(events::failure(ec));
+                return complete<failed>(ec);
             }
 
             log("got %s", rx_buffer);
@@ -125,10 +145,10 @@ private:
                     return;
                 }
 
-                return complete(events::failure(ec));
+                return complete<failed>(ec);
             }
 
-            return complete(events::failure(make_error_code(std::errc::timed_out)));
+            return complete<failed>(make_error_code(std::errc::timed_out));
         }));
     }
 private:
@@ -138,7 +158,7 @@ private:
     std::string             rx_buffer;
 };
 
-class backoff : public state<events::retry, events::failure, events::shutdown> {
+class backoff : public state<retry, failed, terminated> {
 public:
     backoff(asio::io_service& io, std::chrono::seconds cooldown, completion_handler cb) :
         state(io, std::move(cb)),
@@ -146,7 +166,7 @@ public:
     {
         timer.expires_from_now(cooldown);
         timer.async_wait(track([this](const std::error_code& ec) {
-            ec ? complete(events::failure(ec)) : complete(events::retry{});
+            ec ? complete<failed>(ec) : complete<retry>();
         }));
     }
 
@@ -167,20 +187,20 @@ struct state_factory<backoff, Event, context> {
 };
 
 class client : public fsm<transitions<
-        transition<resolving, events::failure, backoff>,
-        transition<resolving, asio::ip::tcp::endpoint, connecting>,
-        transition<resolving, events::shutdown, completed>,
+        transition<resolving, failed, backoff>,
+        transition<resolving, resolved, connecting>,
+        transition<resolving, terminated, completed>,
 
-        transition<connecting, events::failure, backoff>,
-        transition<connecting, std::reference_wrapper<asio::ip::tcp::socket>, online>,
-        transition<connecting, events::shutdown, completed>,
+        transition<connecting, failed, backoff>,
+        transition<connecting, connected, online>,
+        transition<connecting, terminated, completed>,
 
-        transition<online, events::failure, backoff>,
-        transition<online, events::shutdown, completed>,
+        transition<online, failed, backoff>,
+        transition<online, terminated, completed>,
 
-        transition<backoff, events::retry, resolving>,
-        transition<backoff, events::failure, completed>,
-        transition<backoff, events::shutdown, completed>
+        transition<backoff, retry, resolving>,
+        transition<backoff, failed, completed>,
+        transition<backoff, terminated, completed>
     >>
 {
 public:
@@ -211,7 +231,7 @@ private:
                 auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
                 sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
                 return;
-            } else if constexpr (std::is_same_v<event_type, events::shutdown>) {
+            } else if constexpr (std::is_same_v<event_type, terminated>) {
                 complete(v.ec);
                 return;
             } else {

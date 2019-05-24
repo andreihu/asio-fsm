@@ -25,10 +25,10 @@ public:
     state(asio::io_service& io, completion_handler cb) : state_base(io), cb(std::move(cb)), rc(0) {}
     virtual ~state() override = default;
 
-    template<typename V>
-    void complete(V&& v) {
+    template<typename V, typename ...Args>
+    void complete(Args&& ...args) {
         if (!res) {
-            res.emplace(std::forward<V>(v));
+            res.emplace(std::in_place_type<V>, std::forward<Args>(args)...);
             cancel();
         }
     }
@@ -58,7 +58,7 @@ struct completed{
 template<typename State, typename Event, typename Context>
 struct state_factory {
     template<typename Callback>
-    std::unique_ptr<state_base> operator()(const Event& ev, Context& ctx, Callback cb) const {
+    std::unique_ptr<state_base> operator()(Event ev, Context& ctx, Callback cb) const {
         return std::make_unique<State>(ctx.io, ev, std::move(cb));
     }
 };
@@ -174,6 +174,8 @@ struct graphviz_export {
 
     void start() {
         out << "digraph {" << std::endl;
+        out << "node [shape=\"rectangle\"]" <<std::endl;
+        out << "completed [shape=\"ellipse\"]" << std::endl;
     }
 
     void end() {
@@ -183,11 +185,8 @@ struct graphviz_export {
     template<typename Transition>
     void operator()() {
         // "a" -> "b"[label="0.2"];
-        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());
+        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());        
     }
 
     std::ostream& out;    
 };
-
-
-
