@@ -63,11 +63,10 @@ struct state_factory {
     }
 };
 
-template<typename Context>
-struct state_factory<completed, std::error_code, Context> {
-    std::unique_ptr<state_base> operator()(const std::error_code& ev, Context& ctx) const {
-        ctx.io.post(std::bind(ctx.cb, ev));
-        return nullptr;
+template<typename Event, typename Context>
+struct result_factory {
+    auto operator()(Event ev, Context&) const {
+        return ev;
     }
 };
 
@@ -143,50 +142,110 @@ struct visit_impl {
     }
 };
 
-
 template<typename Visitor, typename Transition>
 struct visit_impl<Visitor, Transition, end_of_list> {
     void operator()(Visitor& visitor) const {
-        visitor.template operator()<Transition>();        
+        visitor.template operator()<Transition>();
     }
 };
 
+template<typename Result, typename StartState, typename EndState, typename Context, typename Transitions>
+class fsm;
 
-template<typename Transitions>
-class fsm; 
-
-template<typename ...Args>
-class fsm<transitions<Args...>> {
+template<typename Result, typename StartState, typename EndState, typename Context, typename ...Args>
+class fsm<StartState, Result, EndState, Context, transitions<Args...>> {
 public:
+    using start_state = StartState;
+    using end_state = EndState;
+    using context = Context;
+    using result = Result;
+    using completion_handler = std::function<void(const result&)>;
     using transition_table = transitions<Args...>;
 
+    fsm(asio::io_service& io) : io(io) {}
+
+    template<typename ...Args2>
+    void async_wait(completion_handler cb, Args2 ...args) {
+        if (sess) {
+            return io.post(std::bind(cb, make_error_code(std::errc::operation_in_progress)));
+        }
+
+        sess.emplace(std::move(cb), std::forward<Args2>(args)...);
+        sess->st = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx, std::bind(&fsm::on_event<start_state, start_state::result_type>, this, std::placeholders::_1));
+    }
+
     template<typename Visitor>
-    static void visit(Visitor& visitor) {        
-        visitor.start();
+    static void visit(Visitor& visitor) {
+        visitor.template start<fsm>();
         visit_impl<Visitor, Args..., end_of_list>{}(visitor);
-        visitor.end();
-    }    
+        visitor.template end<fsm>();
+    }
+private:
+    struct session {
+        template<typename State, typename ...Args2>
+        session(completion_handler cb, Args2&& ...args) :
+            cb(std::move(cb)),
+            ctx(std::forward<Args2>(args)...)
+            {}
+
+        completion_handler              cb;
+        context                         ctx;
+        std::unique_ptr<state_base>     st;
+    };
+    using opt_session = std::optional<session>;
+
+    void complete(result r) {
+        if (sess) {
+            io.post(std::bind(sess->cb, std::move(r)));
+            sess = std::nullopt;
+        }
+    }
+
+    template<typename State, typename Event>
+    void on_event(const Event& ev) {
+        std::visit([this](auto v) {
+            using event_type = std::decay_t<decltype(v)>;
+            transition_table::template assert_match<State, event_type>();
+            using next_state_type = typename transition_table::template next_state<State, event_type>;
+            using namespace boost::core;
+            log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
+            if constexpr (!std::is_same_v<next_state_type, end_state>) {
+                auto cb = std::bind(&fsm::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
+                sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
+            } else {
+                complete(result_factory<event_type,context>{}(v, sess->ctx));
+            }
+        }, ev);
+    }
+private:
+    asio::io_service&   io;
+    opt_session         sess;
 };
 
 struct graphviz_export {
-    
-    graphviz_export(std::ostream& out) : out(out) {}
+    graphviz_export(std::ostream& out) : out(out), start_state_visited(false) {}
 
+    template<typename MachineTraits>
     void start() {
         out << "digraph {" << std::endl;
         out << "node [shape=\"rectangle\"]" <<std::endl;
         out << "completed [shape=\"ellipse\"]" << std::endl;
+        if (std::exchange(start_state_visited, false)) {
+            out << type_name<typename MachineTraits::start_state>() << " [shape=\"diamond\"]" << std::endl;
+        }
     }
 
+    template<typename MachineTraits>
     void end() {
         out << "}" << std::endl;
     }
 
     template<typename Transition>
     void operator()() {
-        // "a" -> "b"[label="0.2"];
-        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());        
+        // "a" -> "b"[label="foobar"];
+        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());
     }
 
-    std::ostream& out;    
+    std::ostream& out;
+    bool start_state_visited;
 };

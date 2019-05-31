@@ -25,6 +25,11 @@ class terminated {
 public:
     terminated() = default;
     terminated(const std::error_code& ec) noexcept: ec(ec) {}
+
+    operator std::error_code() const {
+        return ec;
+    }
+
     std::error_code ec;
 };
 
@@ -186,7 +191,7 @@ struct state_factory<backoff, Event, context> {
     }
 };
 
-class client : public fsm<transitions<
+using client = fsm<std::error_code, resolving, terminated, context, transitions<
         transition<resolving, failed, backoff>,
         transition<resolving, resolved, connecting>,
         transition<resolving, terminated, completed>,
@@ -201,59 +206,4 @@ class client : public fsm<transitions<
         transition<backoff, retry, resolving>,
         transition<backoff, failed, completed>,
         transition<backoff, terminated, completed>
-    >>
-{
-public:
-    client(asio::io_service& io) : io(io) {}
-    using completion_handler = std::function<void(const std::error_code& r)>;
-
-    void async_wait(const std::string& host, const std::string& service, completion_handler cb) {
-        sess.emplace(std::move(cb), std::bind(&client::on_event<resolving, resolving::result>, this, std::placeholders::_1), io, host, service);
-    }
-private:
-
-    void complete(const std::error_code& ec = std::error_code{}) {
-        if (sess) {
-            io.post(std::bind(sess->cb, ec));
-            sess = std::nullopt;
-        }
-    }
-
-    template<typename State, typename Event>
-    void on_event(const Event& ev) {
-        std::visit([this](auto v) {
-            using event_type = std::decay_t<decltype(v)>;
-            transition_table::assert_match<State, event_type>();
-            using next_state_type = transition_table::next_state<State, event_type>;
-            using namespace boost::core;
-            log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
-            if constexpr (!std::is_same_v<next_state_type, completed>) {
-                auto cb = std::bind(&client::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
-                sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
-                return;
-            } else if constexpr (std::is_same_v<event_type, terminated>) {
-                complete(v.ec);
-                return;
-            } else {
-                complete();
-                return;
-            }
-        }, ev);
-    }
-private:
-    struct session {
-        template<typename Callback, typename ...Args>
-        session(completion_handler cb, Callback state_cb, Args&& ...args) :
-            cb(std::move(cb)),
-            ctx(std::forward<Args>(args)...),
-            st(state_factory<resolving, std::monostate, context>{}(std::monostate{}, ctx, std::move(state_cb)))
-        {}
-
-        completion_handler          cb;
-        context                     ctx;
-        std::unique_ptr<state_base> st;
-    };
-
-    std::optional<session>      sess;
-    asio::io_service&           io;
-};
+    >>;
