@@ -153,7 +153,7 @@ template<typename Result, typename StartState, typename EndState, typename Conte
 class fsm;
 
 template<typename Result, typename StartState, typename EndState, typename Context, typename ...Args>
-class fsm<StartState, Result, EndState, Context, transitions<Args...>> {
+class fsm<Result, StartState, EndState, Context, transitions<Args...>> {
 public:
     using start_state = StartState;
     using end_state = EndState;
@@ -170,8 +170,8 @@ public:
             return io.post(std::bind(cb, make_error_code(std::errc::operation_in_progress)));
         }
 
-        sess.emplace(std::move(cb), std::forward<Args2>(args)...);
-        sess->st = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx, std::bind(&fsm::on_event<start_state, start_state::result_type>, this, std::placeholders::_1));
+        sess.emplace(io, std::move(cb), std::forward<Args2>(args)...);
+        sess->st = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx, std::bind(&fsm::on_event<start_state, typename start_state::result>, this, std::placeholders::_1));
     }
 
     template<typename Visitor>
@@ -182,10 +182,10 @@ public:
     }
 private:
     struct session {
-        template<typename State, typename ...Args2>
-        session(completion_handler cb, Args2&& ...args) :
+        template<typename ...Args2>
+        session(asio::io_service& io, completion_handler cb, Args2&& ...args) :
             cb(std::move(cb)),
-            ctx(std::forward<Args2>(args)...)
+            ctx(io, std::forward<Args2>(args)...)
             {}
 
         completion_handler              cb;

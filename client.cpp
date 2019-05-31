@@ -13,13 +13,13 @@ int main(int argc, char *argv[]) {
     client::visit(exporter);
 
     client c(io);
-    c.async_wait("127.0.0.1", "5555", [&](const std::error_code& ec) {
+    c.async_wait([&](const std::error_code& ec) {
         if (ec) {
             return log("client failed: %s", ec.message());
         }
 
         log("client done");
-    });
+    }, "127.0.0.1", "5555");
     io.run();
     return 0;
 

@@ -37,6 +37,9 @@ class failed {
 public:
     failed() = default;
     failed(const std::error_code& ec) noexcept: ec(ec) {}
+    operator std::error_code() const {
+        return ec;
+    }    
     std::error_code ec;
 };
 
@@ -56,6 +59,15 @@ public:
 
     operator asio::ip::tcp::socket&() const {
         return sock.get();
+    }
+};
+
+template<typename Event>
+struct state_factory<connected, Event, context> {
+    template<typename Callback>
+    state_handle operator()(const Event& ev, context& ctx, Callback cb) const {
+        ctx.nbackoff = 0;
+        return std::make_unique<connected>(ctx.io, ev, std::move(cb));
     }
 };
 
@@ -191,7 +203,7 @@ struct state_factory<backoff, Event, context> {
     }
 };
 
-using client = fsm<std::error_code, resolving, terminated, context, transitions<
+using client = fsm<std::error_code, resolving, completed, context, transitions<
         transition<resolving, failed, backoff>,
         transition<resolving, resolved, connecting>,
         transition<resolving, terminated, completed>,
