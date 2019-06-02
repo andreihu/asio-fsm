@@ -134,21 +134,6 @@ private:
     };
 };
 
-template<typename Visitor, typename Transition, typename ...Rest>
-struct visit_impl {
-    void operator()(Visitor& visitor) const {
-        visitor.template operator()<Transition>();
-        visit_impl<Visitor, Rest...>{}(visitor);
-    }
-};
-
-template<typename Visitor, typename Transition>
-struct visit_impl<Visitor, Transition, end_of_list> {
-    void operator()(Visitor& visitor) const {
-        visitor.template operator()<Transition>();
-    }
-};
-
 template<typename Result, typename StartState, typename EndState, typename Context, typename Transitions>
 class fsm;
 
@@ -174,6 +159,14 @@ public:
         sess->st = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx, std::bind(&fsm::on_event<start_state, typename start_state::result>, this, std::placeholders::_1));
     }
 
+    void cancel() {
+        if (!sess) {
+            return;
+        }
+
+        sess->state.cancel();
+    }
+
     template<typename Visitor>
     static void visit(Visitor& visitor) {
         visitor.template start<fsm>();
@@ -181,6 +174,21 @@ public:
         visitor.template end<fsm>();
     }
 private:
+    template<typename Visitor, typename Transition, typename ...Rest>
+    struct visit_impl {
+        void operator()(Visitor& visitor) const {
+            visitor.template operator()<Transition>();
+            visit_impl<Visitor, Rest...>{}(visitor);
+        }
+    };
+
+    template<typename Visitor, typename Transition>
+    struct visit_impl<Visitor, Transition, end_of_list> {
+        void operator()(Visitor& visitor) const {
+            visitor.template operator()<Transition>();
+        }
+    };
+
     struct session {
         template<typename ...Args2>
         session(asio::io_service& io, completion_handler cb, Args2&& ...args) :

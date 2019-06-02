@@ -1,8 +1,5 @@
-#include "helpers.hpp"
-
-#include "client.hpp"
-#include "helpers.hpp"
-
+#include "tcp_client.hpp"
+#include <helpers.hpp>
 #include <asio.hpp>
 
 int main(int argc, char *argv[]) {
