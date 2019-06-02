@@ -22,7 +22,18 @@ class state : public state_base {
 public:
     using result = std::variant<Events...>;
     using completion_handler = std::function<void(const result&)>;
-    state(asio::io_service& io, completion_handler cb) : state_base(io), cb(std::move(cb)), rc(0) {}
+    state(asio::io_service& io) : state_base(io), rc(0) {}
+
+    void async_wait(completion_handler cb) {
+        if (this->cb) {
+            throw std::runtime_error("state is already active");
+        }
+
+        this->cb = std::move(cb);
+        on_enter();
+    }
+
+    virtual void on_enter() = 0;
     virtual ~state() override = default;
 
     template<typename V, typename ...Args>
@@ -39,16 +50,20 @@ public:
         return [this, callable = std::forward<Callable>(callable)](auto&&... args) -> decltype(auto) {
             scope_exit _([this] {
                 if (--rc == 0) {
-                    io.post(std::bind(cb, *res));
+                    if (cb) {
+                        io.post(std::bind(*cb, *res));
+                        cb = std::nullopt;
+                        res = std::nullopt;
+                    }                    
                 }
             });
             return callable(std::forward<decltype(args)>(args)...);
         };
     }
 private:
-    completion_handler          cb;
-    std::optional<result>       res;
-    size_t                      rc;
+    std::optional<completion_handler>       cb;
+    std::optional<result>                   res;
+    size_t                                  rc;
 }; // class state
 
 struct completed{
@@ -57,9 +72,8 @@ struct completed{
 
 template<typename State, typename Event, typename Context>
 struct state_factory {
-    template<typename Callback>
-    std::unique_ptr<state_base> operator()(Event ev, Context& ctx, Callback cb) const {
-        return std::make_unique<State>(ctx.io, ev, std::move(cb));
+    std::unique_ptr<State> operator()(Event ev, Context& ctx) const {
+        return std::make_unique<State>(ctx.io, ev);
     }
 };
 
@@ -156,7 +170,9 @@ public:
         }
 
         sess.emplace(io, std::move(cb), std::forward<Args2>(args)...);
-        sess->st = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx, std::bind(&fsm::on_event<start_state, typename start_state::result>, this, std::placeholders::_1));
+        auto new_state = state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx);
+        new_state->async_wait(std::bind(&fsm::on_event<start_state, typename start_state::result>, this, std::placeholders::_1));
+        sess->st = std::move(new_state);
     }
 
     void cancel() {
@@ -217,9 +233,10 @@ private:
             using next_state_type = typename transition_table::template next_state<State, event_type>;
             using namespace boost::core;
             log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
-            if constexpr (!std::is_same_v<next_state_type, end_state>) {
-                auto cb = std::bind(&fsm::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1);
-                sess->st = state_factory<next_state_type, event_type, context>{}(v, sess->ctx, std::move(cb));
+            if constexpr (!std::is_same_v<next_state_type, end_state>) {                
+                auto new_state = state_factory<next_state_type, event_type, context>{}(v, sess->ctx);
+                new_state->async_wait(std::bind(&fsm::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1));
+                sess->st = std::move(new_state);
             } else {
                 complete(result_factory<event_type,context>{}(v, sess->ctx));
             }

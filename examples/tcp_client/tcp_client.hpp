@@ -75,10 +75,14 @@ struct state_factory<connected, Event, context> {
 
 class resolving : public state<failed, resolved, terminated> {
 public:
-    resolving(asio::io_service& io, const std::string& addr, const std::string& service, completion_handler cb) :
-        state(io, std::move(cb)),
-        resolver(io)
-    {
+    resolving(asio::io_service& io, const std::string& addr, const std::string& service) :
+        state(io),
+        resolver(io),
+        addr(addr),
+        service(service)
+    {}
+
+    virtual void on_enter() override {
         resolver.async_resolve(addr, service, track([this](const std::error_code& ec, asio::ip::tcp::resolver::iterator it) {
             ec ? complete<failed>(ec) : complete<resolved>(*it);
         }));
@@ -90,22 +94,26 @@ public:
     }
 private:
     asio::ip::tcp::resolver resolver;
+    std::string             addr;
+    std::string             service;
 };
 
 template<typename Event>
 struct state_factory<resolving, Event, context> {
-    template<typename Callback>
-    state_handle operator()(const Event&, context& ctx, Callback cb) const {
-        return std::make_unique<resolving>(ctx.io, ctx.host, ctx.service, std::move(cb));
+    std::unique_ptr<resolving> operator()(const Event&, context& ctx) const {
+        return std::make_unique<resolving>(ctx.io, ctx.host, ctx.service);
     }
 };
 
 class connecting : public state<failed, connected, terminated> {
 public:
-    connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep, completion_handler cb) :
-        state(io, std::move(cb)),
-        sock(io)
-    {
+    connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep) :
+        state(io),
+        sock(io),
+        ep(ep)
+    {}
+
+    virtual void on_enter() override {
         sock.async_connect(ep, track([this](const std::error_code& ec) {
             ec ? complete<failed>(ec) : complete<connected>(sock);
         }));
@@ -116,17 +124,20 @@ public:
         sock.cancel();
     }
 private:
-    asio::ip::tcp::socket sock;
+    asio::ip::tcp::socket   sock;
+    asio::ip::tcp::endpoint ep;
 };
 
 class online : public state<failed, terminated> {
 public:
-    online(asio::io_service& io, asio::ip::tcp::socket& sock, completion_handler cb) :
-        state(io, std::move(cb)),
+    online(asio::io_service& io, asio::ip::tcp::socket& sock) :
+        state(io),
         sock(std::move(sock)),
         timer(io),
         extend(false)
-    {
+    {}
+
+    virtual void on_enter() override {
         start_read_socket();
         start_wait_timer();
     }
@@ -175,13 +186,24 @@ private:
     std::string             rx_buffer;
 };
 
+template<typename Event>
+struct state_factory<online, Event, context> {
+    std::unique_ptr<online> operator()(const Event& ev, context& ctx) const {
+        ctx.nbackoff = 0;
+        return std::make_unique<online>(ctx.io, ev);
+    }
+};
+
 class backoff : public state<retry, failed, terminated> {
 public:
-    backoff(asio::io_service& io, std::chrono::seconds cooldown, completion_handler cb) :
-        state(io, std::move(cb)),
+    backoff(asio::io_service& io, std::chrono::seconds cooldown) :
+        state(io),
         timer(io)
     {
         timer.expires_from_now(cooldown);
+    }
+
+    virtual void on_enter() override {
         timer.async_wait(track([this](const std::error_code& ec) {
             ec ? complete<failed>(ec) : complete<retry>();
         }));
@@ -196,10 +218,9 @@ private:
 
 template<typename Event>
 struct state_factory<backoff, Event, context> {
-    template<typename Callback>
-    std::unique_ptr<state_base> operator()(const Event&, context& ctx, Callback cb) const {
+    std::unique_ptr<backoff> operator()(const Event&, context& ctx) const {
         std::chrono::seconds timeout(std::min<int>(16, std::pow(2, ctx.nbackoff++)));
-        return std::make_unique<backoff>(ctx.io, timeout, std::move(cb));
+        return std::make_unique<backoff>(ctx.io, timeout);
     }
 };
 
