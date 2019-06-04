@@ -4,6 +4,7 @@
 #include <system_error>
 #include <functional>
 #include <sstream>
+#include <type_traits>
 #include "helpers.hpp"
 
 class state_base {
@@ -54,7 +55,7 @@ public:
                         io.post(std::bind(*cb, *res));
                         cb = std::nullopt;
                         res = std::nullopt;
-                    }                    
+                    }
                 }
             });
             return callable(std::forward<decltype(args)>(args)...);
@@ -151,8 +152,29 @@ private:
 template<typename Result, typename StartState, typename EndState, typename Context, typename Transitions>
 class fsm;
 
+template<typename StartState, typename EndState, typename Transitions>
+class fsm_assertions;
+
+template<typename StartState, typename EndState, typename ...Args>
+class fsm_assertions<StartState, EndState, transitions<Args...>> {
+private:
+    constexpr static bool end_state_reachable() {
+        // TODO: implement me
+        return true;
+    }
+
+    constexpr static bool all_state_reachable() {
+        // TODO: implement me
+        return true;
+    }
+
+    static_assert(!std::is_same_v<StartState, EndState>, "start state and end state must be different");
+    static_assert(end_state_reachable(), "end state must be reachable from start state");
+};
+
 template<typename Result, typename StartState, typename EndState, typename Context, typename ...Args>
-class fsm<Result, StartState, EndState, Context, transitions<Args...>> {
+class fsm<Result, StartState, EndState, Context, transitions<Args...>> :
+    fsm_assertions<StartState, EndState, transitions<Args...>> {
 public:
     using start_state = StartState;
     using end_state = EndState;
@@ -233,7 +255,7 @@ private:
             using next_state_type = typename transition_table::template next_state<State, event_type>;
             using namespace boost::core;
             log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
-            if constexpr (!std::is_same_v<next_state_type, end_state>) {                
+            if constexpr (!std::is_same_v<next_state_type, end_state>) {
                 auto new_state = state_factory<next_state_type, event_type, context>{}(v, sess->ctx);
                 new_state->async_wait(std::bind(&fsm::on_event<next_state_type, typename next_state_type::result>, this, std::placeholders::_1));
                 sess->st = std::move(new_state);
