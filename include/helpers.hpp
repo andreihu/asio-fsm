@@ -54,7 +54,6 @@ void log(const char* fmt, Args&& ...args) {
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-
 struct hostport {
     std::string             host;
     std::optional<uint16_t> port;

@@ -172,6 +172,19 @@ private:
     static_assert(end_state_reachable(), "end state must be reachable from start state");
 };
 
+template<typename UniqueStates, typename Transition, typename ...Rest>
+struct state_tuple;
+
+template<typename ...Args, typename StartState, typename Event, typename NextState, typename ...Rest>
+struct state_tuple<std::tuple<Args...>, transition<StartState, Event, NextState>, Rest...> {
+    using type = typename state_tuple<std::tuple<Args..., StartState, NextState>, Rest...>::type;
+};
+
+template<typename ...Args, typename StartState, typename Event, typename NextState>
+struct state_tuple<std::tuple<Args...>, transition<StartState, Event, NextState>, end_of_list> {
+    using type = std::tuple<Args..., StartState, NextState>;
+};
+
 template<typename Result, typename StartState, typename EndState, typename Context, typename ...Args>
 class fsm<Result, StartState, EndState, Context, transitions<Args...>> :
     fsm_assertions<StartState, EndState, transitions<Args...>> {
@@ -182,8 +195,11 @@ public:
     using result = Result;
     using completion_handler = std::function<void(const result&)>;
     using transition_table = transitions<Args...>;
+    using state_storage = typename state_tuple<std::tuple<>, Args..., end_of_list>::type;
 
-    fsm(asio::io_service& io) : io(io) {}
+    fsm(asio::io_service& io) : io(io) {
+        log("%s", type_name<state_storage>());
+    }
 
     template<typename ...Args2>
     void async_wait(completion_handler cb, Args2 ...args) {
