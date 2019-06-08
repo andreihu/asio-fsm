@@ -62,15 +62,6 @@ public:
     }
 };
 
-template<typename Event>
-struct state_factory<connected, Event, context> {
-    template<typename Callback>
-    state_handle operator()(const Event& ev, context& ctx, Callback cb) const {
-        ctx.nbackoff = 0;
-        return std::make_unique<connected>(ctx.io, ev, std::move(cb));
-    }
-};
-
 // states
 
 class resolving : public state<failed, resolved, terminated> {
@@ -100,10 +91,11 @@ private:
 
 template<typename Event>
 struct state_factory<resolving, Event, context> {
-    std::unique_ptr<resolving> operator()(const Event&, context& ctx) const {
-        return std::make_unique<resolving>(ctx.io, ctx.host, ctx.service);
+    auto operator()(const Event&, context& ctx) const {
+        return std::make_tuple(std::ref(ctx.io), ctx.host, ctx.service);
     }
 };
+
 
 class connecting : public state<failed, connected, terminated> {
 public:
@@ -188,9 +180,9 @@ private:
 
 template<typename Event>
 struct state_factory<online, Event, context> {
-    std::unique_ptr<online> operator()(const Event& ev, context& ctx) const {
+    auto operator()(const Event& ev, context& ctx) const {
         ctx.nbackoff = 0;
-        return std::make_unique<online>(ctx.io, ev);
+        return std::make_tuple(std::ref(ctx.io), ev);
     }
 };
 
@@ -218,10 +210,14 @@ private:
 
 template<typename Event>
 struct state_factory<backoff, Event, context> {
-    std::unique_ptr<backoff> operator()(const Event&, context& ctx) const {
+    auto operator()(const Event&, context& ctx) const {
         std::chrono::seconds timeout(std::min<int>(16, std::pow(2, ctx.nbackoff++)));
-        return std::make_unique<backoff>(ctx.io, timeout);
+        return std::make_tuple(std::ref(ctx.io), timeout);
     }
+};
+
+struct completed {
+    completed(asio::io_service& io, const std::error_code& ec) {}
 };
 
 using client = fsm<std::error_code, resolving, completed, context, transitions<

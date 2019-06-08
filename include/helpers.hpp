@@ -51,6 +51,12 @@ void log(const char* fmt, Args&& ...args) {
     std::cout << tfm::format("[%s]: %s\n", nstr, tfm::format(fmt, std::forward<Args>(args)...));
 }
 
+// returns a constexpr true if the pack Args contains What
+template<typename What, typename ...Args>
+struct contains {
+    static constexpr bool value {(std::is_same_v<What, Args> || ...)}; 
+};
+
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
