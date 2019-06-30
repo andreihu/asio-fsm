@@ -87,9 +87,6 @@ private:
     };
 };
 
-template<typename Result, typename StartState, typename EndState, typename Context, typename Transitions>
-class fsm;
-
 template<typename StartState, typename EndState, typename Transitions>
 class fsm_assertions;
 
@@ -123,19 +120,19 @@ struct variant_unique_append<std::variant<Args...>, T> {
 };
 
 template<typename UniqueStates, typename Transition, typename ...Rest>
-struct state_holder;
+struct state_holder_impl;
 
 template<typename ...Args, typename StartState, typename Event, typename NextState, typename ...Rest>
-struct state_holder<std::variant<Args...>, transition<StartState, Event, NextState>, Rest...> {
+struct state_holder_impl<std::variant<Args...>, transition<StartState, Event, NextState>, Rest...> {
 private:
     using tmp_type = typename variant_unique_append<std::variant<Args...>, StartState>::type;
     using tmp_type2 = typename variant_unique_append<tmp_type, NextState>::type;
 public:
-    using type = typename state_holder<tmp_type2, Rest...>::type;
+    using type = typename state_holder_impl<tmp_type2, Rest...>::type;
 };
 
 template<typename ...Args, typename StartState, typename Event, typename NextState>
-struct state_holder<std::variant<Args...>, transition<StartState, Event, NextState>, end_of_list> {
+struct state_holder_impl<std::variant<Args...>, transition<StartState, Event, NextState>, end_of_list> {
 private:
     using tmp_type = typename variant_unique_append<std::variant<Args...>, StartState>::type;
     using tmp_type2 = typename variant_unique_append<tmp_type, NextState>::type;
@@ -143,17 +140,25 @@ public:
     using type = tmp_type2;
 };
 
-template<typename Result, typename StartState, typename EndState, typename Context, typename ...Args>
-class fsm<Result, StartState, EndState, Context, transitions<Args...>> :
-    fsm_assertions<StartState, EndState, transitions<Args...>> {
+template<typename UniqueStates, typename TransitionTable>
+struct state_holder;
+
+template<typename UniqueStates, typename ...Args>
+struct state_holder<UniqueStates, transitions<Args...>>
+{
+    using type = typename state_holder_impl<UniqueStates, Args..., end_of_list>::type;
+};
+
+template<typename Traits>
+class fsm : fsm_assertions<typename Traits::start_state, typename Traits::end_state, typename Traits::transitions> {
 public:
-    using start_state = StartState;
-    using end_state = EndState;
-    using context = Context;
-    using result = Result;
+    using start_state = typename Traits::start_state;
+    using end_state = typename Traits::end_state;
+    using context = typename Traits::context;
+    using result = typename Traits::result;
     using completion_handler = std::function<void(const result&)>;
-    using transition_table = transitions<Args...>;
-    using state_storage = typename state_holder<std::variant<std::monostate, StartState>, Args..., end_of_list>::type;
+    using transition_table = typename Traits::transitions;
+    using state_storage = typename state_holder<std::variant<std::monostate, start_state>, transition_table>::type;
 
     fsm(asio::io_service& io) : io(io) {}
 
@@ -190,10 +195,8 @@ public:
     }
 
     template<typename Visitor>
-    static void visit(Visitor& visitor) {
-        visitor.template start<fsm>();
-        visit_impl<Visitor, Args..., end_of_list>{}(visitor);
-        visitor.template end<fsm>();
+    static void static_visit(Visitor& visitor) {
+        visit<Visitor, transition_table>{}(visitor);
     }
 private:
     template<typename Visitor, typename Transition, typename ...Rest>
@@ -208,6 +211,18 @@ private:
     struct visit_impl<Visitor, Transition, end_of_list> {
         void operator()(Visitor& visitor) const {
             visitor.template operator()<Transition>();
+        }
+    };
+
+    template<typename Visitor, typename Transitions>
+    struct visit;
+
+    template<typename Visitor, typename ...Args>
+    struct visit<Visitor, transitions<Args...>> {
+        void operator()(Visitor& visitor) const {
+            visitor.template start<fsm>();
+            visit_impl<Visitor, Args..., end_of_list>{}(visitor);
+            visitor.template end<fsm>();
         }
     };
 

@@ -38,19 +38,27 @@ struct state_factory<backoff, Event, context> {
     }
 };
 
-using client = fsm<std::error_code, resolving, completed, context, transitions<
-    transition<resolving, failed, backoff>,
-    transition<resolving, resolved, connecting>,
-    transition<resolving, terminated, completed>,
+struct client_traits {
+    using start_state = resolving;
+    using end_state = completed;
+    using result = std::error_code;
+    using context = context;
+    using transitions = transitions<
+        transition<resolving, failed, backoff>,
+        transition<resolving, resolved, connecting>,
+        transition<resolving, terminated, completed>,
 
-    transition<connecting, failed, backoff>,
-    transition<connecting, connected, online>,
-    transition<connecting, terminated, completed>,
+        transition<connecting, failed, backoff>,
+        transition<connecting, connected, online>,
+        transition<connecting, terminated, completed>,
 
-    transition<online, failed, backoff>,
-    transition<online, terminated, completed>,
+        transition<online, failed, backoff>,
+        transition<online, terminated, completed>,
 
-    transition<backoff, retry, resolving>,
-    transition<backoff, failed, completed>,
-    transition<backoff, terminated, completed>
->>;
+        transition<backoff, retry, resolving>,
+        transition<backoff, failed, completed>,
+        transition<backoff, terminated, completed>
+    >;
+};
+
+using client = fsm<client_traits>;

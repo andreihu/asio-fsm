@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     asio::io_service io;
 
     graphviz_export exporter(std::cout);
-    client::visit(exporter);
+    client::static_visit(exporter);
 
     client c(io);
     asio::signal_set sigs(io, SIGINT);
