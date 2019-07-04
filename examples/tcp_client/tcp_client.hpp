@@ -42,8 +42,8 @@ struct client_traits {
     using start_state = resolving;
     using end_state = completed;
     using result = std::error_code;
-    using context = context;
-    using transitions = transitions<
+    using context = ::context;
+    using transitions = ::transitions<
         transition<resolving, failed, backoff>,
         transition<resolving, resolved, connecting>,
         transition<resolving, terminated, completed>,
