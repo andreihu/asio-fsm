@@ -1,10 +1,9 @@
 #pragma once
 
-#include "helpers.hpp"
-
 #include <iostream>
 #include <utility>
 
+#include <fsm/helpers.hpp>
 
 struct graphviz_export {
     graphviz_export(std::ostream& out) : out(out), start_state_visited(false) {}

@@ -1,13 +1,14 @@
 #pragma once
 
-#include <string>
-#include <ctime>
 #include <chrono>
 #include <cstring>
-#include <optional>
+#include <ctime>
 #include <functional>
+#include <optional>
+#include <string>
 
 #include <fmt/format.h>
+
 #include <boost/core/typeinfo.hpp>
 
 template<typename T>

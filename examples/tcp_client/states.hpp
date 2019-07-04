@@ -1,16 +1,15 @@
 #pragma once
 
-#include "events.hpp"
-
-#include <state.hpp>
-
-#include <asio.hpp>
-
+#include <cmath>
+#include <functional>
+#include <string>
 #include <system_error>
 #include <variant>
-#include <string>
-#include <functional>
-#include <cmath>
+
+#include <fsm/events.hpp>
+#include <fsm/state.hpp>
+
+#include <asio.hpp>
 
 class resolving : public state<failed, resolved, terminated> {
 public:

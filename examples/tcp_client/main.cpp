@@ -1,7 +1,7 @@
 #include "tcp_client.hpp"
 
-#include <graphviz_export.hpp>
-#include <helpers.hpp>
+#include <fsm/graphviz_export.hpp>
+#include <fsm/helpers.hpp>
 
 #include <asio.hpp>
 

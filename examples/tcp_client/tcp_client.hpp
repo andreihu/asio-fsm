@@ -1,9 +1,8 @@
 #pragma once
 
-#include "events.hpp"
-#include "states.hpp"
-
-#include <fsm.hpp>
+#include <fsm/events.hpp>
+#include <fsm/fsm.hpp>
+#include <fsm/states.hpp>
 
 #include <asio.hpp>
 
