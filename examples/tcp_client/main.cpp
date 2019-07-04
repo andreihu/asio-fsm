@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
 
     c.async_wait([&](const std::error_code& ec) {
         if (ec) {
-            return log("client failed: %s", ec.message());
+            return log("client failed: {}", ec.message());
         }
 
         sigs.cancel();
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
     sigs.async_wait([&](const std::error_code& ec, int signo) {
         if (ec) {
-            log("signal handler completed with: %s", ec.message());
+            log("signal handler completed with: {}", ec.message());
             return;
         }
 

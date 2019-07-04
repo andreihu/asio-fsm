@@ -88,7 +88,7 @@ private:
                 return complete<failed>(ec);
             }
 
-            log("got %s", rx_buffer);
+            log("got {}", rx_buffer);
             rx_buffer.clear();
             start_read_socket();
             extend = true;

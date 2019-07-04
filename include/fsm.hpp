@@ -260,7 +260,7 @@ private:
             using event_type = std::decay_t<decltype(v)>;
             transition_table::template assert_match<State, event_type>();
             using next_state_type = typename transition_table::template next_state<State, event_type>;
-            log("%s + %s => %s", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
+            log("{} + {} => {}", type_name<State>(), type_name<event_type>(), type_name<next_state_type>());
             if constexpr (!std::is_same_v<next_state_type, end_state>) {
                 auto& old_state = sess->active_state();
                 // creating the new state
