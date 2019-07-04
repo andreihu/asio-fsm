@@ -1,12 +1,13 @@
 #pragma once
 
+#include "events.hpp"
+
 #include <cmath>
 #include <functional>
 #include <string>
 #include <system_error>
 #include <variant>
 
-#include <fsm/events.hpp>
 #include <fsm/state.hpp>
 
 #include <asio.hpp>

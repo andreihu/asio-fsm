@@ -5,6 +5,8 @@
 
 #include <fsm/helpers.hpp>
 
+#include <fmt/format.h>
+
 struct graphviz_export {
     graphviz_export(std::ostream& out) : out(out), start_state_visited(false) {}
 
@@ -26,7 +28,7 @@ struct graphviz_export {
     template<typename Transition>
     void operator()() {
         // "a" -> "b"[label="foobar"];
-        out << tfm::format("\"%s\" -> \"%s\" [label=\"%s\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());
+        out << fmt::format("\"{}\" -> \"{}\" [label=\"{}\"]\n", type_name<typename Transition::source>(), type_name<typename Transition::next>(), type_name<typename Transition::event>());
     }
 
     std::ostream& out;
