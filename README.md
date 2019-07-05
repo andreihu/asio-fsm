@@ -7,6 +7,17 @@ The project is in pre-alpha state. I am experimenting with the concept and try p
 ## Motivation
 While creating Asio programs, usually we're using the mental concept of a Finite State Machine (FSM). Multiple approaches are possible to implement an asio-based program in terms of FSMs, but all of these contain a huge amount of boilerplate, restrict reusing and have other drawbacks. Asio tries to overcome these drawbacks by providing helper classes that make the heavy lifting and ease the mapping process from an FSM to the code which implements that.
 
+## Getting started
+For handling dependancies like `Boost`, `fmt` and `asio`, we use [conan](https://conan.io) as a package manager for C++.
+
+```
+mkdir build
+cd build
+conan install ..
+cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -GNinja ..
+ninja
+```
+
 ## Documentation
 See the wiki: https://github.com/andreihu/asio-fsm/wiki
 

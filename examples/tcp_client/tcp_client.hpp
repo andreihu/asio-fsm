@@ -3,7 +3,7 @@
 #include "events.hpp"
 #include "states.hpp"
 
-#include <fsm.hpp>
+#include <fsm/fsm.hpp>
 
 #include <asio.hpp>
 

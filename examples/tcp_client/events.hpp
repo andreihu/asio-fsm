@@ -1,9 +1,8 @@
 #pragma once
 
-#include <asio.hpp>
-
 #include <system_error>
 
+#include <asio.hpp>
 
 class retry {};
 class terminated {

@@ -2,15 +2,15 @@
 
 #include "events.hpp"
 
-#include <state.hpp>
-
-#include <asio.hpp>
-
+#include <cmath>
+#include <functional>
+#include <string>
 #include <system_error>
 #include <variant>
-#include <string>
-#include <functional>
-#include <cmath>
+
+#include <fsm/state.hpp>
+
+#include <asio.hpp>
 
 class resolving : public state<failed, resolved, terminated> {
 public:
@@ -88,7 +88,7 @@ private:
                 return complete<failed>(ec);
             }
 
-            log("got %s", rx_buffer);
+            log("got {}", rx_buffer);
             rx_buffer.clear();
             start_read_socket();
             extend = true;
