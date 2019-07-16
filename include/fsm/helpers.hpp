@@ -10,15 +10,6 @@
 
 #include <fmt/format.h>
 
-#if 0
-#include <boost/core/typeinfo.hpp>
-
-template<typename T>
-std::string type_name() {
-    return boost::core::demangled_name(BOOST_CORE_TYPEID(T));
-}
-#endif
-
 template <> struct fmt::formatter<std::error_code> {
   template <typename ParseContext> constexpr auto parse(ParseContext &ctx) {
     return ctx.begin();
