@@ -6,6 +6,7 @@
 #include <variant>
 
 #include <fsm/helpers.hpp>
+#include <fsm/type_name.hpp>
 
 #include <asio.hpp>
 
@@ -172,7 +173,7 @@ public:
         sess.emplace(io, std::move(cb), std::forward<Args2>(args)...);
         auto& active_state = sess->active_state();
         std::apply([&](auto&& ...args2) {
-            active_state.template emplace<start_state>(std::forward<decltype(args2)>(args2)...);            
+            active_state.template emplace<start_state>(std::forward<decltype(args2)>(args2)...);
         }, state_factory<start_state, std::monostate, context>{}(std::monostate{}, sess->ctx));
         std::visit([&](auto&& s) {
             using T = std::decay_t<decltype(s)>;
@@ -190,7 +191,7 @@ public:
         std::visit([](auto&& s) {
             using T = std::decay_t<decltype(s)>;
             if constexpr (!std::is_same_v<std::monostate, T> && !std::is_same_v<end_state, T>) {
-                s.cancel();    
+                s.cancel();
             }
         }, sess->active_state());
     }
@@ -233,7 +234,7 @@ private:
             cb(std::move(cb)),
             ctx(io, std::forward<Args2>(args)...),
             holder1_active(true)
-            {}        
+            {}
 
         state_storage& active_state() {
             return holder1_active ? st1 : st2 ;
@@ -265,12 +266,12 @@ private:
             if constexpr (!std::is_same_v<next_state_type, end_state>) {
                 auto& old_state = sess->active_state();
                 // creating the new state
-                sess->holder1_active = !sess->holder1_active;                
+                sess->holder1_active = !sess->holder1_active;
                 auto& active_state = sess->active_state();
                 std::apply([&](auto&& ...args2) {
-                    active_state.template emplace<next_state_type>(std::forward<decltype(args2)>(args2)...);            
+                    active_state.template emplace<next_state_type>(std::forward<decltype(args2)>(args2)...);
                 }, state_factory<next_state_type, event_type, context>{}(v, sess->ctx));
-                // invoking async_wait on the new state                
+                // invoking async_wait on the new state
                 std::visit([&](auto&& s) {
                     using T = std::decay_t<decltype(s)>;
                     if constexpr (std::is_same_v<T, next_state_type> && !std::is_same_v<T, end_state>) {
@@ -280,7 +281,7 @@ private:
                 // throwing away the old state
                 old_state = std::monostate{};
             } else {
-                complete(result_factory<event_type,context>{}(v, sess->ctx));                
+                complete(result_factory<event_type,context>{}(v, sess->ctx));
             }
         }, ev);
     }
