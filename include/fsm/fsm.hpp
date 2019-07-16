@@ -165,7 +165,7 @@ public:
     fsm(asio::io_service& io) : io(io) {}
 
     template<typename ...Args2>
-    void async_wait(completion_handler cb, Args2 ...args) {
+    void async_wait(completion_handler cb, Args2&& ...args) {
         if (sess) {
             throw std::runtime_error("state machine already active");
         }

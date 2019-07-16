@@ -4,14 +4,32 @@
 #include "events.hpp"
 
 #include <fsm/fsm.hpp>
-#include <null_context.hpp>
+
+struct context {
+    context(asio::io_service& io) : io(io) {}
+    asio::io_service& io;
+};
+
+template<typename Event>
+struct state_factory<ticked, Event, context> {
+    auto operator()(const Event&, context& ctx) const {
+        return std::make_tuple(std::ref(ctx.io));
+    }
+};
+
+template<typename Event>
+struct state_factory<tocked, Event, context> {
+    auto operator()(const Event&, context& ctx) const {
+        return std::make_tuple(std::ref(ctx.io));
+    }
+};
 
 struct tick_tock_traits {
     using start_state = ticked;
-    using end_state = terminated;
-    using context = null_context;
+    using end_state = completed;
+    using context = ::context;
     using result = std::error_code;
-    using transition_table = transitions<
+    using transitions = ::transitions<
         transition<ticked, tock, tocked>,
         transition<ticked, terminated, completed>,
         transition<tocked, tick, ticked>,
@@ -19,4 +37,4 @@ struct tick_tock_traits {
     >;
 };
 
-using tic_tock = fsm<tick_tock_traits>;
+using tick_tock = fsm<tick_tock_traits>;

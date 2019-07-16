@@ -30,7 +30,7 @@ private:
     asio::steady_timer timer;
 };
 
-class tocked : public state<tock, terminated> {
+class tocked : public state<tick, terminated> {
 public:
     tocked(asio::io_service& io) :
         state(io),
@@ -40,7 +40,7 @@ public:
     virtual void on_enter() override {
         timer.expires_from_now(std::chrono::seconds(3));
         timer.async_wait(track([this](const std::error_code& ec) {
-            ec ? complete<terminated>(ec) : complete<tock>();
+            ec ? complete<terminated>(ec) : complete<tick>();
         }));
     }
 
