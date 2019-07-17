@@ -14,8 +14,8 @@ For handling dependancies like `Boost`, `fmt` and `asio`, we use [conan](https:/
 mkdir build
 cd build
 conan install ..
-cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -GNinja ..
-ninja
+cmake ..
+cmake --build .
 ```
 
 ## Documentation
@@ -26,7 +26,7 @@ Since the library is header only, nothing is needed to use it beyond a C++17 com
 
 ### Optional requirements
 - CMake (to build examples)
-- Boost (to build examples)
+- Conan (to build examples)
 
   
 ## License
