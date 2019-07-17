@@ -16,6 +16,6 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
 add_library(fsm INTERFACE)
 target_include_directories(fsm INTERFACE include)
-target_link_libraries(fsm INTERFACE CONAN_PKG::fmt CONAN_PKG::boost CONAN_PKG::asio)
+target_link_libraries(fsm INTERFACE CONAN_PKG::fmt CONAN_PKG::asio)
 
 add_subdirectory(examples)
