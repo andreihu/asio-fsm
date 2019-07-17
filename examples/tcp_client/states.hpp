@@ -1,21 +1,28 @@
 #pragma once
 
+// ours
 #include "events.hpp"
 
+#include <log.hpp>
+#include <test_state_base.hpp>
+
+#include <afsm/state.hpp>
+#include <afsm/util/type_name.hpp>
+
+// thirdparty
+#include <asio.hpp>
+
+// std
 #include <cmath>
 #include <functional>
 #include <string>
 #include <system_error>
 #include <variant>
 
-#include <fsm/state.hpp>
-
-#include <asio.hpp>
-
-class resolving : public state<failed, resolved, terminated> {
+class resolving : public test_state_base<resolving, failed, resolved, terminated> {
 public:
     resolving(asio::io_service& io, const std::string& addr, const std::string& service) :
-        state(io),
+        test_state_base(io),
         resolver(io),
         addr(addr),
         service(service)
@@ -37,10 +44,10 @@ private:
     std::string             service;
 };
 
-class connecting : public state<failed, connected, terminated> {
+class connecting : public test_state_base<connecting, failed, connected, terminated> {
 public:
     connecting(asio::io_service& io, const asio::ip::tcp::endpoint& ep) :
-        state(io),
+        test_state_base(io),
         sock(io),
         ep(ep)
     {}
@@ -60,10 +67,10 @@ private:
     asio::ip::tcp::endpoint ep;
 };
 
-class online : public state<failed, terminated> {
+class online : public test_state_base<online, failed, terminated> {
 public:
     online(asio::io_service& io, asio::ip::tcp::socket& sock) :
-        state(io),
+        test_state_base(io),
         sock(std::move(sock)),
         timer(io),
         extend(false)
@@ -118,10 +125,10 @@ private:
     std::string             rx_buffer;
 };
 
-class backoff : public state<retry, failed, terminated> {
+class backoff : public test_state_base<backoff, retry, failed, terminated> {
 public:
     backoff(asio::io_service& io, std::chrono::seconds cooldown) :
-        state(io),
+        test_state_base(io),
         timer(io)
     {
         timer.expires_from_now(cooldown);

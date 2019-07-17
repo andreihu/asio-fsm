@@ -1,11 +1,17 @@
 #pragma once
 
+// ours
 #include "events.hpp"
 #include "states.hpp"
 
-#include <fsm/fsm.hpp>
+#include <afsm/state_machine.hpp>
 
+// thirdparty
 #include <asio.hpp>
+
+// std
+#include <string>
+#include <cstdint>
 
 struct context {
     context(asio::io_service& io, const std::string& host, const std::string& service) : io(io), host(host), service(service), nbackoff(0) {}
@@ -14,6 +20,8 @@ struct context {
     std::string             service;
     size_t                  nbackoff;
 };
+
+namespace afsm {
 
 template<typename Event>
 struct state_factory<resolving, Event, context> {
@@ -38,27 +46,29 @@ struct state_factory<backoff, Event, context> {
     }
 };
 
+} // namespace afsm
+
 struct client_traits {
     using start_state = resolving;
     using end_state = completed;
     using result = std::error_code;
     using context = ::context;
-    using transitions = ::transitions<
-        transition<resolving, failed, backoff>,
-        transition<resolving, resolved, connecting>,
-        transition<resolving, terminated, completed>,
+    using transitions = afsm::transitions<
+        afsm::transition<resolving, failed, backoff>,
+        afsm::transition<resolving, resolved, connecting>,
+        afsm::transition<resolving, terminated, completed>,
 
-        transition<connecting, failed, backoff>,
-        transition<connecting, connected, online>,
-        transition<connecting, terminated, completed>,
+        afsm::transition<connecting, failed, backoff>,
+        afsm::transition<connecting, connected, online>,
+        afsm::transition<connecting, terminated, completed>,
 
-        transition<online, failed, backoff>,
-        transition<online, terminated, completed>,
+        afsm::transition<online, failed, backoff>,
+        afsm::transition<online, terminated, completed>,
 
-        transition<backoff, retry, resolving>,
-        transition<backoff, failed, completed>,
-        transition<backoff, terminated, completed>
+        afsm::transition<backoff, retry, resolving>,
+        afsm::transition<backoff, failed, completed>,
+        afsm::transition<backoff, terminated, completed>
     >;
 };
 
-using client = fsm<client_traits>;
+using client = afsm::state_machine<client_traits>;

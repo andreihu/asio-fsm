@@ -6,6 +6,9 @@
 #include <memory>
 #include <cstdlib>
 
+namespace afsm {
+namespace util {
+
 inline
 std::string demangle(const char* mangled)
 {
@@ -18,3 +21,6 @@ template<class T>
 std::string type_name() { 
     return demangle(typeid(T).name()); 
 }
+
+} // namespace util
+} // namespace afsm

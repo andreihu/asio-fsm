@@ -1,2 +1,3 @@
+include_directories(include)
 add_subdirectory(tcp_client)
 add_subdirectory(tick_tock)

@@ -1,15 +1,18 @@
+
+// ours
 #include "tcp_client.hpp"
+#include <log.hpp>
 
-#include <fsm/graphviz_export.hpp>
-#include <fsm/helpers.hpp>
+#include <afsm/visitor/graphviz_export.hpp>
 
+// thirdparty
 #include <asio.hpp>
 
 int main(int argc, char *argv[]) {
     std::string server_address = "127.0.0.1";
     asio::io_service io;
 
-    graphviz_export exporter(std::cout);
+    afsm::visitor::graphviz_export exporter(std::cout);
     client::static_visit(exporter);
 
     client c(io);
@@ -22,7 +25,7 @@ int main(int argc, char *argv[]) {
 
         sigs.cancel();
         log("client done");
-    }, "127.0.0.1", "5555");
+    }, server_address, "5555");
 
     sigs.async_wait([&](const std::error_code& ec, int signo) {
         if (ec) {

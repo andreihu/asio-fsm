@@ -4,4 +4,4 @@ add_executable(tcp_client
   states.hpp
   tcp_client.hpp
 )
-target_link_libraries(tcp_client PRIVATE fsm)
+target_link_libraries(tcp_client PRIVATE afsm)

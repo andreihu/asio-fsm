@@ -1,17 +1,22 @@
 #pragma once
 
+// ours
 #include "events.hpp"
 
-#include <fsm/state.hpp>
+#include <test_state_base.hpp>
 
+#include <afsm/state.hpp>
+
+// thirdparty
 #include <asio.hpp>
 
+// std
 #include <chrono>
 
-class ticked : public state<tock, terminated> {
+class ticked : public test_state_base<ticked, tock, terminated> {
 public:
     ticked(asio::io_service& io) :
-        state(io),
+        test_state_base(io),
         timer(io)
     {}
 
@@ -30,10 +35,10 @@ private:
     asio::steady_timer timer;
 };
 
-class tocked : public state<tick, terminated> {
+class tocked : public test_state_base<tocked, tick, terminated> {
 public:
     tocked(asio::io_service& io) :
-        state(io),
+        test_state_base(io),
         timer(io)
     {}
 

@@ -1,10 +1,12 @@
 #include "tick_tock.hpp"
 
-#include <fsm/graphviz_export.hpp>
+#include <log.hpp>
+
+#include <afsm/state_machine.hpp>
+#include <afsm/visitor/graphviz_export.hpp>
 
 int main() {
-
-    graphviz_export exporter(std::cout);
+    afsm::visitor::graphviz_export exporter(std::cout);
     tick_tock::static_visit(exporter);
 
     asio::io_service io;

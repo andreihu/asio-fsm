@@ -1,12 +1,16 @@
 #pragma once
 
+#include "util/scope_exit.hpp"
+
+// thirdparty
+#include <asio.hpp>
+
+// std
 #include <functional>
 #include <optional>
 #include <variant>
 
-#include <fsm/helpers.hpp>
-
-#include <asio.hpp>
+namespace afsm {
 
 class state_base {
 public:
@@ -48,7 +52,7 @@ public:
     auto track(Callable&& callable) {
         ++rc;
         return [this, callable = std::forward<Callable>(callable)](auto&&... args) -> decltype(auto) {
-            scope_exit _([this] {
+            util::scope_exit _([this] {
                 if (--rc == 0) {
                     if (cb) {
                         io.post(std::bind(*cb, *res));
@@ -65,3 +69,5 @@ private:
     std::optional<result>                   res;
     size_t                                  rc;
 }; // class state
+
+} // namespace afsm
